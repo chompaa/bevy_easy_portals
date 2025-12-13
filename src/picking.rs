@@ -1,6 +1,6 @@
 //! Portal picking functionality for `bevy_picking`.
 //!
-//! Add the [`PortalPickingPlugin`] to propagate picking events from backends "through" portals.
+//! Add the [`PortalPickingPlugin`] to propagate picking messages from backends "through" portals.
 //!
 //! This module does *not* provide any backend for you. It provides custom inputs that are
 //! compatible with any backend. The entity containing the [`Portal`] will need to be picked via a
@@ -10,14 +10,14 @@
 //! component to be considered in the backend. This also applies to portal cameras.
 
 use bevy::{
+    camera::NormalizedRenderTarget,
     picking::{
-        PickSet,
+        PickingSystems,
         hover::HoverMap,
         pointer::{Location, PointerAction, PointerId, PointerInput, PointerLocation},
     },
     platform::collections::HashSet,
     prelude::*,
-    render::camera::NormalizedRenderTarget,
 };
 use uuid::Uuid;
 
@@ -28,12 +28,12 @@ pub struct PortalPickingPlugin;
 
 impl Plugin for PortalPickingPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<PortalInput>()
+        app.add_message::<PortalInput>()
             .add_systems(
                 PreUpdate,
                 (
-                    portal_inputs.in_set(PickSet::Input),
-                    portal_picking.in_set(PickSet::Last),
+                    portal_inputs.in_set(PickingSystems::Input),
+                    portal_picking.in_set(PickingSystems::Last),
                 ),
             )
             .add_observer(add_pointer);
@@ -41,7 +41,7 @@ impl Plugin for PortalPickingPlugin {
 }
 
 /// Used to send inputs obtained in [`portal_picking`] in the next frame.
-#[derive(Event, Debug)]
+#[derive(Message, Debug)]
 struct PortalInput {
     pointer_id: PointerId,
     location: Location,
@@ -50,11 +50,11 @@ struct PortalInput {
 
 /// Adds [`PointerId`] and [`PointerLocation`] to entities that have a [`PortalImage`] added.
 fn add_pointer(
-    trigger: Trigger<OnAdd, PortalImage>,
+    trigger: On<Add, PortalImage>,
     mut commands: Commands,
     query: Query<(Entity, &PortalImage)>,
 ) {
-    let (entity, portal_image) = query.get(trigger.target()).unwrap();
+    let (entity, portal_image) = query.get(trigger.event_target()).unwrap();
 
     let location = Location {
         target: NormalizedRenderTarget::Image(portal_image.0.clone().into()),
@@ -69,14 +69,14 @@ fn add_pointer(
 
 /// Maps incoming [`PortalInput`]s to [`PointerInput`]s.
 fn portal_inputs(
-    mut portal_inputs: EventReader<PortalInput>,
-    mut output: EventWriter<PointerInput>,
+    mut portal_inputs: MessageReader<PortalInput>,
+    mut output: MessageWriter<PointerInput>,
 ) {
-    for event in portal_inputs.read() {
+    for message in portal_inputs.read() {
         output.write(PointerInput {
-            pointer_id: event.pointer_id,
-            location: event.location.clone(),
-            action: event.action,
+            pointer_id: message.pointer_id,
+            location: message.location.clone(),
+            action: message.action,
         });
     }
 }
@@ -91,8 +91,8 @@ fn portal_picking(
     camera_query: Query<&Camera>,
     hover_map: Res<HoverMap>,
     pointer_state: Res<PointerState>,
-    mut pointer_inputs: EventReader<PointerInput>,
-    mut portal_inputs: EventWriter<PortalInput>,
+    mut pointer_inputs: MessageReader<PointerInput>,
+    mut portal_inputs: MessageWriter<PortalInput>,
     mut dragged_last_frame: Local<HashSet<(PointerId, Entity)>>,
 ) {
     let mut portals: HashSet<(PointerId, Entity)> = dragged_last_frame.drain().collect();
@@ -171,7 +171,7 @@ fn portal_picking(
                 continue;
             };
 
-            // We could use `Commands::send_event` here, but I'm not sure if it will hurt
+            // We could use `Commands::send_message` here, but I'm not sure if it will hurt
             // performance
             portal_inputs.write(PortalInput {
                 pointer_id: portal_pointer_id,

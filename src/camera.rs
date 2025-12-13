@@ -1,4 +1,9 @@
 use bevy::{
+    camera::{
+        Exposure, ImageRenderTarget, RenderTarget,
+        primitives::{Frustum, HalfSpace},
+        visibility::VisibilitySystems,
+    },
     core_pipeline::tonemapping::{DebandDither, Tonemapping},
     ecs::system::SystemParam,
     image::{TextureFormatPixelInfo, Volume},
@@ -6,12 +11,10 @@ use bevy::{
     math::FloatOrd,
     prelude::*,
     render::{
-        camera::{Exposure, ImageRenderTarget, ManualTextureViews, RenderTarget},
-        primitives::{Frustum, HalfSpace},
         render_resource::{
             Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
         },
-        view::{ColorGrading, VisibilitySystems},
+        view::ColorGrading,
     },
     window::{PrimaryWindow, WindowRef, WindowResized},
 };
@@ -25,7 +28,8 @@ pub struct PortalCameraPlugin;
 /// Label for systems that update [`Portal`] related cameras.
 #[derive(Debug, PartialEq, Eq, Clone, Hash, SystemSet)]
 pub enum PortalCameraSystems {
-    /// Resizes [`Portal::linked_camera`]'s rendered image if any [`WindowResized`] events are read.
+    /// Resizes [`Portal::linked_camera`]'s rendered image if any [`WindowResized`] messages are
+    /// read.
     ResizeImage,
     /// Updates the [`GlobalTransform`] and [`Transform`] components for [`Portal::linked_camera`]
     /// based on the [`Portal::primary_camera`]s [`GlobalTransform`].
@@ -39,7 +43,7 @@ impl Plugin for PortalCameraPlugin {
         app.configure_sets(
             PostUpdate,
             (
-                PortalCameraSystems::UpdateTransform.after(TransformSystem::TransformPropagate),
+                PortalCameraSystems::UpdateTransform.after(TransformSystems::Propagate),
                 PortalCameraSystems::UpdateFrusta.after(VisibilitySystems::UpdateFrusta),
             )
                 .chain(),
@@ -80,7 +84,7 @@ pub struct PortalImage(pub Handle<Image>);
 ///
 /// * The [`PortalCamera`] will inherit any properties currently present on the primary camera.
 fn setup_portal_camera(
-    trigger: Trigger<OnAdd, Portal>,
+    trigger: On<Add, Portal>,
     mut commands: Commands,
     mut portal_query: Query<&mut Portal>,
     primary_camera_query: Query<(
@@ -94,7 +98,7 @@ fn setup_portal_camera(
     global_transform_query: Query<&GlobalTransform>,
     mut portal_images: PortalImages,
 ) {
-    let entity = trigger.target();
+    let entity = trigger.event_target();
 
     let mut portal = portal_query.get_mut(entity).unwrap();
 
@@ -142,17 +146,17 @@ fn setup_portal_camera(
 
     commands
         .entity(entity)
-        .insert(PortalImage(image_handle.clone_weak()));
+        .insert(PortalImage(image_handle.clone()));
 }
 
 /// System that despawns a [`Portal::linked_camera`] when the [`Portal`] component is removed from
 /// a triggered entity.
 fn despawn_portal_camera(
-    trigger: Trigger<OnRemove, Portal>,
+    trigger: On<Remove, Portal>,
     portal_query: Query<&Portal>,
     mut commands: Commands,
 ) {
-    let portal = portal_query.get(trigger.target()).unwrap();
+    let portal = portal_query.get(trigger.event_target()).unwrap();
 
     if let Some(linked_camera) = portal.linked_camera {
         commands.entity(linked_camera).despawn();
@@ -240,15 +244,15 @@ fn update_portal_camera_frusta(
     }
 }
 
-/// System that resizes [`PortalImage`]s when the [`WindowResized`] event is fired.
+/// System that resizes [`PortalImage`]s when the [`WindowResized`] message is fired.
 fn resize_portal_images(
-    mut resized_reader: EventReader<WindowResized>,
+    mut resized_reader: MessageReader<WindowResized>,
     window_query: Query<&Window>,
     portal_image_query: Query<&PortalImage>,
     mut images: ResMut<Assets<Image>>,
 ) {
-    for event in resized_reader.read() {
-        let window_size = window_query.get(event.window).unwrap().physical_size();
+    for message in resized_reader.read() {
+        let window_size = window_query.get(message.window).unwrap().physical_size();
         let size = Extent3d {
             width: window_size.x,
             height: window_size.y,
@@ -281,7 +285,7 @@ impl PortalImages<'_, '_> {
         let size = self.get_viewport_size(camera)?;
         let format = TextureFormat::Bgra8UnormSrgb;
         let image = Image {
-            data: Some(vec![0; size.volume() * format.pixel_size()]),
+            data: Some(vec![0; size.volume() * format.pixel_size().ok()?]),
             texture_descriptor: TextureDescriptor {
                 label: None,
                 size,
@@ -319,6 +323,7 @@ impl PortalImages<'_, '_> {
                     .manual_texture_views
                     .get(handle)
                     .map(|texture| texture.size),
+                RenderTarget::None { size } => Some(*size),
             },
         }
         .map(|size| Extent3d {
