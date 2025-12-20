@@ -12,10 +12,10 @@ documentation = "https://docs.rs/bevy_easy_portals"
 exclude = [".github"]
 
 [dependencies]
-uuid = { version = "1.11.0", features = ["v4"], optional = true }
+uuid = { version = "1", features = ["v4"], optional = true }
 
 [dependencies.bevy]
-version = "0.17"
+version = "0.18.0-rc.1"
 default-features = false
 features = [
 	"bevy_core_pipeline",
@@ -27,7 +27,7 @@ features = [
 ]
 
 [dev-dependencies.bevy]
-version = "0.17"
+version = "0.18.0-rc.1"
 
 [features]
 default = []

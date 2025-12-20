@@ -31,7 +31,6 @@ fn setup(
         .spawn((
             Camera3d::default(),
             Camera {
-                // The portal will inherit properties of the primary camera
                 clear_color: ClearColorConfig::Custom(Color::BLACK),
                 ..default()
             },
@@ -82,7 +81,15 @@ fn setup(
         // Since we're constructing a mirror, let's parent the target to the mirror itself
         .add_child(target)
         // Now let's create the portal!
-        .insert(Portal::new(primary_camera, target));
+        .insert(
+            Portal::new(primary_camera, target).with_camera_spawn(|camera| {
+                // The camera does not inherit from the primary camera.
+                camera.insert(Camera {
+                    clear_color: ClearColorConfig::Custom(Color::BLACK),
+                    ..default()
+                });
+            }),
+        );
 }
 
 fn rotate_shape(mut shape_transform: Single<&mut Transform, With<Shape>>, time: Res<Time>) {

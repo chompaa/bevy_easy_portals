@@ -28,13 +28,12 @@ fn setup(
                 ..default()
             },
             Transform::from_xyz(-3.5, 0.0, 8.0).looking_at(Vec3::ZERO, Vec3::Y),
+            AmbientLight {
+                brightness: 750.0,
+                ..default()
+            },
         ))
         .id();
-
-    commands.insert_resource(AmbientLight {
-        brightness: 750.0,
-        ..default()
-    });
 
     let shape = commands
         .spawn((
@@ -58,7 +57,12 @@ fn setup(
             // portal setup
             Mesh3d(meshes.add(rectangle)),
             portal_transform,
-            Portal::new(primary_camera, target),
+            Portal::new(primary_camera, target).with_camera_spawn(|camera| {
+                camera.insert(AmbientLight {
+                    brightness: 750.0,
+                    ..Default::default()
+                });
+            }),
         ))
         .with_children(|parent| {
             // We can use another mesh for our portal if we wish

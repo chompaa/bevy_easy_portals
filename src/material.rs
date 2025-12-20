@@ -26,7 +26,7 @@ impl Plugin for PortalMaterialPlugin {
         app.add_plugins(MaterialPlugin::<PortalMaterial>::default())
             .add_systems(
                 PreUpdate,
-                update_materials::<PortalMaterial>
+                update_materials
                     .run_if(on_message::<WindowResized>)
                     .after(PortalCameraSystems::ResizeImage),
             )
@@ -114,18 +114,6 @@ impl From<&PortalMaterial> for PortalMaterialKey {
     }
 }
 
-/// Marks all materials `T` that are on [`Portal`] entities as changed in the asset system.
-///
-/// See https://github.com/bevyengine/bevy/issues/5069 for context.
-pub fn update_materials<T: Material>(
-    material_query: Query<&MeshMaterial3d<T>, With<Portal>>,
-    mut materials: ResMut<Assets<T>>,
-) {
-    for material_handle in &material_query {
-        materials.get_mut(material_handle);
-    }
-}
-
 fn spawn_material(
     trigger: On<Add, PortalImage>,
     mut commands: Commands,
@@ -143,4 +131,16 @@ fn spawn_material(
             cull_mode: portal.cull_mode,
             ..default()
         })));
+}
+
+fn update_materials(
+    portals: Query<(&PortalImage, &MeshMaterial3d<PortalMaterial>), Changed<PortalImage>>,
+    mut materials: ResMut<Assets<PortalMaterial>>,
+) {
+    for (portal_image, material) in &portals {
+        let Some(portal_material) = materials.get_mut(&material.0) else {
+            continue;
+        };
+        portal_material.base_color_texture = Some(portal_image.0.clone());
+    }
 }

@@ -43,6 +43,10 @@ fn setup(
             },
             Transform::from_xyz(0.0, 0.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
             RenderLayers::from_layers(&[0, 1]),
+            AmbientLight {
+                brightness: 375.0,
+                ..default()
+            },
         ))
         .id();
 
@@ -51,11 +55,6 @@ fn setup(
         let (config, _) = config_store.config_mut::<PortalGizmos>();
         config.render_layers = RenderLayers::layer(1)
     }
-
-    commands.insert_resource(AmbientLight {
-        brightness: 375.0,
-        ..default()
-    });
 
     let idle_material = materials.add(Color::from(SKY_200));
     let drag_material = materials.add(Color::from(VIOLET_400));
@@ -84,7 +83,18 @@ fn setup(
             .spawn((
                 Mesh3d(meshes.add(rectangle)),
                 portal_transform,
-                Portal::new(primary_camera, target),
+                Portal::new(primary_camera, target).with_camera_spawn(|camera| {
+                    camera.insert((
+                        Camera {
+                            clear_color: ClearColorConfig::Custom(Color::BLACK),
+                            ..default()
+                        },
+                        AmbientLight {
+                            brightness: 375.0,
+                            ..default()
+                        },
+                    ));
+                }),
                 RenderLayers::layer(1),
                 // We want to be able to hover the glass
                 Pickable {
@@ -127,7 +137,7 @@ fn draw_mesh_intersections(
     untargetable: Query<Entity, Or<(With<Portal>, With<Glass>)>>,
     mut gizmos: Gizmos,
 ) {
-    for (point, normal) in pointers
+    for (position, normal) in pointers
         .iter()
         .flat_map(|interaction| interaction.iter())
         .filter_map(|(entity, hit)| {
@@ -138,7 +148,7 @@ fn draw_mesh_intersections(
             }
         })
     {
-        gizmos.arrow(point, point + normal.normalize() * 0.5, Color::WHITE);
+        gizmos.arrow(position, position + normal.normalize() * 0.5, Color::WHITE);
     }
 }
 

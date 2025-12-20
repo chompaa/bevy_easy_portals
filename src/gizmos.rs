@@ -31,7 +31,7 @@ fn debug_portal_meshes(
             rotation: global_transform.rotation(),
             scale: (aabb.half_extents * 2.0).into(),
         };
-        gizmos.cuboid(transform, ORANGE_600);
+        gizmos.cube(transform, ORANGE_600);
     }
 }
 

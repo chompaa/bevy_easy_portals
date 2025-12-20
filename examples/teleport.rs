@@ -33,7 +33,7 @@ fn main() {
         )
         .add_systems(
             PostUpdate,
-            handle_portal_collision.before(PortalCameraSystems::UpdateFrusta),
+            handle_portal_collision.before(PortalCameraSystems::UpdateTransform),
         )
         .run();
 }
@@ -44,11 +44,11 @@ const WALL_MESH_SIZE: f32 = 20.0;
 const PORTAL_MESH_SIZE: f32 = 2.5;
 const PORTAL_FRAME_SIZES_AND_TRANSLATIONS: [(Vec3, Vec3); 4] = [
     // Left
-    (Vec3::new(0.1, 2.5, 0.2), Vec3::new(-1.3, -0.009, 0.0)),
+    (Vec3::new(0.1, 2.6, 0.2), Vec3::new(-1.309, -0.009, 0.0)),
     // Right
-    (Vec3::new(0.1, 2.5, 0.2), Vec3::new(1.3, -0.009, 0.0)),
+    (Vec3::new(0.1, 2.6, 0.2), Vec3::new(1.309, -0.009, 0.0)),
     // Top
-    (Vec3::new(2.7, 0.1, 0.2), Vec3::new(0.0, 1.291, 0.0)),
+    (Vec3::new(2.718, 0.1, 0.2), Vec3::new(0.0, 1.309, 0.0)),
     // Bottom
     (Vec3::new(2.7, 0.1, 0.2), Vec3::new(-0.0, -1.309, 0.0)),
 ];
@@ -105,19 +105,19 @@ fn setup(
             // mesh and the near clipping plane of the camera. The value has been "fine-tuned" to
             // visual correctness. PRs that remove this hack are welcome :)
             Projection::Perspective(PerspectiveProjection {
-                near: 1e-8,
+                near: 1e-14,
+                near_clip_plane: vec4(0.0, 0.0, -1.0, -1e-14),
                 ..default()
             }),
             Transform::from_translation(CAMERA_START_XYZ),
             CameraController::default(),
             RenderLayers::from_layers(&[0, 1]),
+            AmbientLight {
+                brightness: 750.0,
+                ..Default::default()
+            },
         ))
         .id();
-
-    commands.insert_resource(AmbientLight {
-        brightness: 750.0,
-        ..default()
-    });
 
     let target_a = commands.spawn(Transform::IDENTITY).id();
     let portal_a = commands.spawn_empty().add_child(target_a).id();
@@ -178,7 +178,13 @@ fn setup(
                 // back face.
                 Portal::new(primary_camera, target)
                     .with_cull_mode(None)
-                    .with_flip_near_plane_normal(true),
+                    .with_flip_near_plane_normal(true)
+                    .with_camera_spawn(|camera| {
+                        camera.insert(AmbientLight {
+                            brightness: 750.0,
+                            ..Default::default()
+                        });
+                    }),
                 // Stop portals from recursively rendering eachother
                 RenderLayers::layer(1),
             ))

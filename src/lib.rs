@@ -7,7 +7,14 @@ pub mod material;
 #[cfg(feature = "picking")]
 pub mod picking;
 
-use bevy::{app::PluginGroupBuilder, prelude::*, render::render_resource::Face};
+use std::num::NonZeroUsize;
+
+use bevy::{
+    app::PluginGroupBuilder, camera::visibility::RenderLayers, prelude::*,
+    render::render_resource::Face,
+};
+
+use crate::camera::PortalCameras;
 
 /// A group of plugins that provides the required systems to make a [`Portal`] work.
 pub struct PortalPlugins;
@@ -31,8 +38,7 @@ impl PluginGroup for PortalPlugins {
 ///
 /// [`RenderTarget::Image`]: bevy::render::camera::RenderTarget
 #[non_exhaustive]
-#[derive(Component, Reflect, Debug)]
-#[reflect(Component)]
+#[derive(Component)]
 #[require(Transform)]
 pub struct Portal {
     /// The entity with the primary render [`Camera`].
@@ -43,6 +49,32 @@ pub struct Portal {
     ///
     /// This entity should contain a [`Transform`] component.
     pub target: Entity,
+    /// The cameras that belong to this portal.
+    ///
+    /// If `max_depth` is set to `0`, this will contain two entities.
+    cameras: PortalCameras,
+    /// Maximum depth for recursive portals.
+    ///
+    /// By default, this is set to `1`, meaning no recursive rendering will occur.
+    ///
+    /// Notes
+    ///
+    /// * `max_depth` determines the amount of extra cameras to spawn, which can impact performance.
+    pub max_depth: NonZeroUsize,
+    /// The camera systems spawn a camera with a render layer that nothing else belongs too, so we
+    /// can render a "blank" image, so that recursion doesn't look so jarring.
+    ///
+    /// By default, this is `RenderLayers::layer(42)`.
+    pub blank_render_layer: RenderLayers,
+    /// Optional callback that is executed when the portals's camera is spawned.
+    ///
+    /// This lets you insert any components you'd like.
+    ///
+    /// # Notes
+    ///
+    /// * If `None`, [`Camera::order`] is set to `-1`.
+    /// * [`Camera::target`] is overriden after the callback is executed.
+    pub camera_spawn: Option<Box<dyn FnMut(&mut EntityCommands) + Send + Sync>>,
     /// Specifies which side of the portal to cull: "front", "back", or neither.
     ///
     /// If set to `None`, both sides of the portal’s mesh will be rendered.
@@ -52,12 +84,9 @@ pub struct Portal {
     /// # Note
     ///
     /// If you are using `Some(Face::Front)` or `None` here, and your mesh is flat, you should
-    /// consider setting [`Portal::conditionally_flip_near_plane_normal`] to `true`.
+    /// consider setting [`Portal::flip_near_plane_normal`] to `true`.
     // TODO: Can this be remotely reflected upstream now that #6042 has landed?
-    #[reflect(ignore)]
     pub cull_mode: Option<Face>,
-    /// The entity that has this portal's [`camera::PortalCamera`].
-    pub linked_camera: Option<Entity>,
     /// If set to `true` this will flip the near plane of the [`camera::PortalCamera`]s frustum if
     /// the primary camera is facing the back face of the portal.
     ///
@@ -82,8 +111,11 @@ impl Portal {
         Self {
             primary_camera,
             target,
+            max_depth: NonZeroUsize::new(7).unwrap(),
+            blank_render_layer: RenderLayers::layer(42),
+            camera_spawn: None,
             cull_mode: Some(Face::Back),
-            linked_camera: None,
+            cameras: PortalCameras::default(),
             flip_near_plane_normal: false,
         }
     }
@@ -99,6 +131,16 @@ impl Portal {
     #[must_use]
     pub fn with_flip_near_plane_normal(mut self, with_flip_near_plane_normal: bool) -> Self {
         self.flip_near_plane_normal = with_flip_near_plane_normal;
+        self
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn with_camera_spawn<F>(mut self, camera_spawn: F) -> Self
+    where
+        F: FnMut(&mut EntityCommands) + Send + Sync + 'static,
+    {
+        self.camera_spawn = Some(Box::new(camera_spawn));
         self
     }
 }
