@@ -9,4 +9,3 @@ components = [
     "clippy",
     "rust-analyzer",
 ]
-targets = ["wasm32-wasip2"]

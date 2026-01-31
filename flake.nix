@@ -14,6 +14,7 @@
 
   outputs =
     {
+      self,
       nixpkgs,
       crane,
       flake-utils,
